@@ -1,0 +1,77 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import io from 'socket.io-client';
+import * as ImagePicker from 'expo-image-picker';
+
+// 🚨 SUSTITUIR CON TU URL DE RAILWAY
+const socket = io("https://TU-PROYECTO.up.railway.app"); 
+
+export default function App() {
+  const [nombre, setNombre] = useState('');
+  const [registrado, setRegistrado] = useState(false);
+  const [mensaje, setMensaje] = useState('');
+  const [chat, setChat] = useState([]);
+
+  useEffect(() => {
+    socket.on("recibir-mensaje", (msg) => setChat((prev) => [...prev, msg]));
+    return () => socket.off("recibir-mensaje");
+  }, []);
+
+  const enviar = (contenido, tipo = 'texto') => {
+    if (!contenido) return;
+    socket.emit("enviar-mensaje", { 
+      id: Date.now().toString(), 
+      usuario: nombre, 
+      contenido, 
+      tipo,
+      hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    setMensaje('');
+  };
+
+  const pickImage = async () => {
+    let res = await ImagePicker.launchImageLibraryAsync({ quality: 0.5 });
+    if (!res.canceled) enviar(res.assets[0].uri, 'imagen');
+  };
+
+  if (!registrado) {
+    return (
+      <View style={styles.login}>
+        <TextInput style={styles.input} placeholder="Tu nombre" onChangeText={setNombre} />
+        <TouchableOpacity style={styles.btn} onPress={() => nombre.length > 2 && setRegistrado(true)}>
+          <Text style={{color: 'white'}}>ENTRAR</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{flex: 1}}>
+      <FlatList data={chat} keyExtractor={item => item.id} renderItem={({item}) => (
+        <View style={[styles.msg, item.usuario === nombre ? styles.mine : styles.other]}>
+          <Text style={styles.u}>{item.usuario}</Text>
+          {item.tipo === 'texto' ? <Text>{item.contenido}</Text> : <Image source={{uri: item.contenido}} style={styles.img} />}
+        </View>
+      )} />
+      <View style={styles.inputArea}>
+        <TouchableOpacity onPress={pickImage}><Text style={styles.icon}>📷</Text></TouchableOpacity>
+        <TextInput style={styles.chatInput} value={mensaje} onChangeText={setMensaje} />
+        <TouchableOpacity onPress={() => enviar(mensaje)}><Text style={styles.icon}>🚀</Text></TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  login: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#075E54' },
+  input: { backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 10 },
+  btn: { backgroundColor: '#25D366', padding: 15, borderRadius: 10, alignItems: 'center' },
+  msg: { padding: 10, margin: 5, borderRadius: 10, maxWidth: '80%' },
+  mine: { alignSelf: 'flex-end', backgroundColor: '#DCF8C6' },
+  other: { alignSelf: 'flex-start', backgroundColor: 'white' },
+  u: { fontWeight: 'bold', fontSize: 10, color: '#075E54' },
+  img: { width: 200, height: 150, borderRadius: 10 },
+  inputArea: { flexDirection: 'row', padding: 10, backgroundColor: 'white', alignItems: 'center' },
+  chatInput: { flex: 1, backgroundColor: '#eee', borderRadius: 20, paddingHorizontal: 15, marginHorizontal: 10, height: 40 },
+  icon: { fontSize: 24 }
+});
